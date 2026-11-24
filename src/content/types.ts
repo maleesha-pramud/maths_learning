@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-export type SectionId = 'diff' | 'int' | 'prob' | 'series' | 'rec'
-export type SubjectId = 'calc' | 'psr'
+export type SectionId = 'diff' | 'int' | 'prob' | 'series' | 'rec' | 'vbase' | 'vspace' | 'vbasis' | 'vmat'
+export type SubjectId = 'calc' | 'psr' | 'vec'
 export interface Step { title: string; body: ReactNode }
 export interface Question {
   q: string            // question text (Sinhala), may contain $latex$ is NOT supported - use plain text/unicode

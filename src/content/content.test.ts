@@ -57,9 +57,10 @@ describe('quiz content', () => {
     expect(new Set(topics.map((t) => t.id)).size).toBe(topics.length)
     for (const t of topics) { expect(t.steps.length, t.id).toBeGreaterThanOrEqual(3); expect(t.remember.length).toBeGreaterThan(0); expect(t.mistakes.length).toBeGreaterThan(0) }
   })
-  it('calculus has 12 topics and probability/series/recursion has 15', () => {
+  it('calculus has 12 topics, probability/series/recursion 15 and vector spaces 12', () => {
     expect(topicsOfSubject('calc')).toHaveLength(12)
     expect(topicsOfSubject('psr')).toHaveLength(15)
+    expect(topicsOfSubject('vec')).toHaveLength(12)
   })
   it('every question is well-formed', () => {
     for (const t of topics) {
@@ -158,6 +159,19 @@ describe('progress & unlocking', () => {
     expect(isUnlocked(p, 'final-psr')).toBe(false)
     for (const t of topicsOfSubject('psr')) p = applyResult(p, t.id, 100)
     expect(isUnlocked(p, 'final-psr')).toBe(true)
+  })
+  it('vector-space subject unlocks independently of the others', () => {
+    let p = load()
+    expect(isUnlocked(p, 'v1')).toBe(true)
+    expect(isUnlocked(p, 'v2')).toBe(false)
+    for (const t of [...topicsOfSubject('calc'), ...topicsOfSubject('psr')]) p = applyResult(p, t.id, 100)
+    expect(isUnlocked(p, 'v2')).toBe(false)
+    expect(isUnlocked(p, 'final-vec')).toBe(false)
+    for (const t of topics.filter((x) => x.section === 'vbase')) p = applyResult(p, t.id, 100)
+    expect(isUnlocked(p, 'sec-vbase')).toBe(true)
+    expect(isUnlocked(p, 'sec-vspace')).toBe(false)
+    for (const t of topicsOfSubject('vec')) p = applyResult(p, t.id, 100)
+    expect(isUnlocked(p, 'final-vec')).toBe(true)
   })
   it('practice modes only give questions from that section', () => {
     const r = seeded(3)

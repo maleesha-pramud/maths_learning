@@ -291,14 +291,137 @@ export function genRecSeq(r: Rng = Math.random): Gen {
   return { q: `a₁ = ${a1}, aₙ = ${mul ? `${m}·aₙ₋₁` : `aₙ₋₁ + ${d}`}. a${sub(k)} = ?`, answer: seq[k - 1], why: `අනුක්‍රමය: ${seq.join(', ')}.`, check: { kind: 'calc', compute: () => { let t = a1; for (let i = 1; i < k; i++) t = mul ? t * m : t + d; return t } }, section: 'rec' }
 }
 
+/* ─────────── Vector spaces & subspaces ─────────── */
+/** Gaussian elimination rank (floating, epsilon-guarded) */
+function rankOf(M: number[][]): number {
+  const A = M.map((row) => row.slice())
+  const m = A.length, n = A[0].length
+  let rank = 0
+  for (let c = 0; c < n && rank < m; c++) {
+    let p = rank
+    for (let i = rank + 1; i < m; i++) if (Math.abs(A[i][c]) > Math.abs(A[p][c])) p = i
+    if (Math.abs(A[p][c]) < 1e-9) continue
+    ;[A[rank], A[p]] = [A[p], A[rank]]
+    for (let i = rank + 1; i < m; i++) {
+      const f = A[i][c] / A[rank][c]
+      for (let j = c; j < n; j++) A[i][j] -= f * A[rank][j]
+    }
+    rank++
+  }
+  return rank
+}
+const nz = (r: Rng, lo: number, hi: number) => { let v = 0; while (v === 0) v = ri(r, lo, hi); return v }
+
+export function genVecAdd(r: Rng = Math.random): Gen {
+  const a = ri(r, -5, 6), b = ri(r, -5, 6), c = ri(r, -5, 6), d = ri(r, -5, 6), first = r() < 0.5
+  return { q: `u = (${a}, ${b}), v = (${c}, ${d}) නම් u + v හි ${first ? 'පළමු' : 'දෙවන'} සංරචකය (component) කීයද?`, answer: first ? a + c : b + d, why: `දෛශික එකතු කරන්නේ සංරචක එකින් එක: (${a}+${c}, ${b}+${d}) = (${a + c}, ${b + d}).`, check: { kind: 'calc', compute: () => { const s = [a, b].map((x, i) => x + [c, d][i]); return first ? s[0] : s[1] } }, section: 'vbase' }
+}
+export function genVecScale(r: Rng = Math.random): Gen {
+  const k = nz(r, -3, 4), a = ri(r, -5, 6), b = ri(r, -5, 6), first = r() < 0.5
+  return { q: `${k} · (${a}, ${b}) හි ${first ? 'පළමු' : 'දෙවන'} සංරචකය කීයද?`, answer: first ? k * a : k * b, why: `අදිශයෙන් (scalar) ගුණ කිරීම = සංරචක දෙකම ${k} න් ගුණ කිරීම: (${k * a}, ${k * b}).`, check: { kind: 'calc', compute: () => [a, b].map((x) => x * k)[first ? 0 : 1] }, section: 'vbase' }
+}
+export function genSubsetCount(r: Rng = Math.random): Gen {
+  const n = ri(r, 2, 5), proper = r() < 0.5
+  return { q: `කුලකයක අවයව ${n}ක් ඇත. එහි ${proper ? 'සංවෘත (proper) උපකුලක' : 'සියලු උපකුලක (හිස් කුලකය සහ කුලකයම ද ඇතුළුව)'} කීයද?`, answer: 2 ** n - (proper ? 1 : 0), why: `හැම අවයවයක්ම “ඇතුළත් / නැත” යන විකල්ප 2කින් එකක්: 2^${n} = ${2 ** n}${proper ? `. කුලකයම ඉවත් කළාම ${2 ** n - 1}.` : '.'}`, check: { kind: 'calc', compute: () => { let c = 0; for (let m = 0; m < 1 << n; m++) if (!proper || m !== (1 << n) - 1) c++; return c } }, section: 'vbase' }
+}
+
+interface PlaneSet { text: string; pred: (x: number, y: number) => boolean; why: string; ok: boolean }
+export function genIsSubspace(r: Rng = Math.random): Gen {
+  const a = ri(r, 1, 3), k = ri(r, 1, 5), rad = ri(r, 2, 4)
+  const sets: PlaneSet[] = [
+    { text: `x + ${a === 1 ? '' : a}y = 0`, pred: (x, y) => Math.abs(x + a * y) < 1e-9, ok: true, why: 'සමජාතීය (= 0) සමීකරණයක විසඳුම් කුලකයක් — ශූන්‍ය දෛශිකය ඇතුළුයි, එකතුවටත් ගුණනයටත් සංවෘතයි.' },
+    { text: `x + ${a === 1 ? '' : a}y = ${k}`, pred: (x, y) => Math.abs(x + a * y - k) < 1e-9, ok: false, why: `(0, 0) ආදේශ කළොත් 0 = ${k} වැරදියි — ශූන්‍ය දෛශිකය නෑ.` },
+    { text: 'x ≥ 0 සහ y ≥ 0', pred: (x, y) => x >= 0 && y >= 0, ok: false, why: 'සෘණ අදිශයෙන් (−1) ගුණ කළාම කොටසෙන් පිටතට යනවා.' },
+    { text: 'x = 0 හෝ y = 0 (අක්ෂ දෙක)', pred: (x, y) => x === 0 || y === 0, ok: false, why: '(1, 0) + (0, 1) = (1, 1) කුලකයෙන් පිටත.' },
+    { text: `y = ${a}x`, pred: (x, y) => Math.abs(y - a * x) < 1e-9, ok: true, why: 'මූල ලක්ෂ්‍යය හරහා යන රේඛාවක් — උප අවකාශයක්.' },
+    { text: `x² + y² ≤ ${rad * rad}`, pred: (x, y) => x * x + y * y <= rad * rad, ok: false, why: 'දෙගුණ කළාම තැටියෙන් පිටතට යනවා — අදිශ ගුණනයට සංවෘත නෑ.' },
+  ]
+  const s = sets[ri(r, 0, sets.length - 1)]
+  const pts: [number, number][] = []
+  for (let x = -4; x <= 4; x++) for (let y = -4; y <= 4; y++) if (s.pred(x, y)) pts.push([x, y])
+  return {
+    q: `S = {(x, y) : ${s.text}} යනු ℝ² හි උප අවකාශයක්ද?`,
+    options: ['ඔව් — උප අවකාශයකි', 'නැහැ — උප අවකාශයක් නොවේ'],
+    answer: s.ok ? 0 : 1,
+    why: s.why,
+    check: { kind: 'calc', compute: () => (s.pred(0, 0) && pts.every(([x, y]) => [-1, 2, 3].every((c) => s.pred(c * x, c * y)) && pts.every(([u, v]) => s.pred(x + u, y + v))) ? 0 : 1) },
+    section: 'vspace',
+  }
+}
+
+export function genDet2(r: Rng = Math.random): Gen {
+  const a = ri(r, -3, 5), b = ri(r, -3, 5), c = ri(r, -3, 5), d = ri(r, -3, 5)
+  return { q: `u = (${a}, ${b}) සහ v = (${c}, ${d}) දෛශික වලින් සෑදෙන න්‍යාසයේ නිර්ණායකය (det) කීයද? [ u v ] = [[${a}, ${c}], [${b}, ${d}]]`, answer: a * d - b * c, why: `det = ad − bc = (${a})(${d}) − (${c})(${b}) = ${a * d - b * c}.`, check: { kind: 'calc', compute: () => { const M = [[a, c], [b, d]]; return M[0][0] * M[1][1] - M[0][1] * M[1][0] } }, section: 'vbasis' }
+}
+export function genIndepMCQ(r: Rng = Math.random): Gen {
+  const a = nz(r, -3, 4), b = nz(r, -3, 4), dep = r() < 0.5, k = nz(r, -3, 3)
+  const c = dep ? k * a : a + ri(r, 1, 3), d = dep ? k * b : b - ri(r, 1, 3)
+  return { q: `(${a}, ${b}) සහ (${c}, ${d}) දෛශික ℝ² හි රේඛීයව ස්වායත්තද (linearly independent)?`, options: ['ඔව් — ස්වායත්තයි (පාදකයක් වේ)', 'නැහැ — පරායත්තයි'], answer: a * d - b * c !== 0 ? 0 : 1, why: `det = (${a})(${d}) − (${c})(${b}) = ${a * d - b * c}. ${a * d - b * c !== 0 ? '0 නොවේ ⟹ ස්වායත්තයි.' : '0 ⟹ එකම රේඛාවේ (සමාන්තරයි) ⟹ පරායත්තයි.'}`, check: { kind: 'calc', compute: () => (rankOf([[a, b], [c, d]]) === 2 ? 0 : 1) }, section: 'vbasis' }
+}
+export function genDimSpan(r: Rng = Math.random): Gen {
+  const p = [nz(r, -2, 3), ri(r, -2, 3), ri(r, -2, 3)], q = [ri(r, -2, 3), nz(r, -2, 3), ri(r, -2, 3)]
+  const cross = [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]]
+  const indepPQ = cross.some((x) => x !== 0)
+  const k = nz(r, -2, 2)
+  const dependent = r() < 0.5
+  const third = dependent ? [p[0] + k * q[0], p[1] + k * q[1], p[2] + k * q[2]] : [ri(r, -3, 3), ri(r, -3, 3), ri(r, -3, 3)]
+  const det3 = third[0] * cross[0] + third[1] * cross[1] + third[2] * cross[2]
+  const ans = indepPQ ? (det3 !== 0 ? 3 : 2) : rankOf([p, q, third])
+  const s = (v: number[]) => `(${v.join(', ')})`
+  return { q: `span{${s(p)}, ${s(q)}, ${s(third)}} හි මානය (dimension) කීයද?`, answer: ans, why: `තීරු තුන න්‍යාසයක් කර පේළි-ඌනනය (row reduction) කරන්න — ප්‍රධාන තීරු (pivots) ගණන = මානය = ${ans}.`, check: { kind: 'calc', compute: () => rankOf([p, q, third]) }, section: 'vbasis' }
+}
+export function genSolDim(r: Rng = Math.random): Gen {
+  const n = ri(r, 3, 5), eq = ri(r, 1, 2)
+  const rows: number[][] = []
+  const first = Array.from({ length: n }, (_, i) => (i === 0 ? nz(r, 1, 3) : ri(r, -2, 3)))
+  rows.push(first)
+  if (eq === 2) rows.push(Array.from({ length: n }, (_, i) => (i === 0 ? 0 : i === 1 ? nz(r, 1, 3) : ri(r, -2, 3))))
+  const fmt = (row: number[]) => row.map((c, i) => (c === 0 ? '' : `${c < 0 ? '−' : '+'}${Math.abs(c) === 1 ? '' : Math.abs(c)}x${'₁₂₃₄₅'[i]}`)).join(' ').replace(/^\+/, '')
+  return { q: `ℝ${'⁰¹²³⁴⁵'[n]} හි ${rows.map((x) => `${fmt(x)} = 0`).join(' සහ ')} විසඳුම් කුලකයේ (උප අවකාශයේ) මානය කීයද?`, answer: n - eq, why: `ස්වායත්ත සමීකරණ ${eq}ක්, අඥාත ${n}ක් ⟹ නිදහස් විචල්‍ය (free variables) ${n} − ${eq} = ${n - eq}. මානය = ${n - eq}.`, check: { kind: 'calc', compute: () => n - rankOf(rows) }, section: 'vbasis' }
+}
+
+export function genCoords(r: Rng = Math.random): Gen {
+  const std = r() < 0.5, p = ri(r, -4, 6), q = ri(r, -4, 6), first = r() < 0.5
+  const v = std ? [p + q, p - q] : [p + q, q]
+  const B = std ? [[1, 1], [1, -1]] : [[1, 0], [1, 1]]
+  return {
+    q: `B = {(${B[0].join(', ')}), (${B[1].join(', ')})} සහ v = (${v[0]}, ${v[1]}) නම් [v]_B හි ${first ? 'පළමු' : 'දෙවන'} ඛණ්ඩාංකය කීයද?`,
+    answer: first ? p : q,
+    why: `a(${B[0].join(', ')}) + b(${B[1].join(', ')}) = (${v[0]}, ${v[1]}) විසඳන්න ⟹ a = ${p}, b = ${q}. පරීක්ෂාව: ${p}(${B[0].join(', ')}) + ${q}(${B[1].join(', ')}) = (${v[0]}, ${v[1]}) ✔`,
+    check: { kind: 'calc', compute: () => { const det = B[0][0] * B[1][1] - B[1][0] * B[0][1]; const a = (v[0] * B[1][1] - B[1][0] * v[1]) / det, b = (B[0][0] * v[1] - B[0][1] * v[0]) / det; return first ? a : b } },
+    section: 'vmat',
+  }
+}
+export function genToStd(r: Rng = Math.random): Gen {
+  const p = ri(r, -3, 5), q = ri(r, -3, 5), first = r() < 0.5
+  return { q: `B = {(1, 1), (1, −1)} සහ [v]_B = (${p}, ${q}) නම් සම්මත (standard) ඛණ්ඩාංක වලින් v හි ${first ? 'පළමු' : 'දෙවන'} සංරචකය කීයද?`, answer: first ? p + q : p - q, why: `v = ${p}(1, 1) + ${q}(1, −1) = (${p + q}, ${p - q}).`, check: { kind: 'calc', compute: () => { const P = [[1, 1], [1, -1]]; const c = [p, q]; return P[first ? 0 : 1][0] * c[0] + P[first ? 0 : 1][1] * c[1] } }, section: 'vmat' }
+}
+export function genNullity(r: Rng = Math.random): Gen {
+  const m = ri(r, 2, 6), n = ri(r, 3, 8), rk = ri(r, 1, Math.min(m, n))
+  return { q: `${m} × ${n} න්‍යාසයක (A) ශ්‍රේණිය (rank) ${rk} නම් ශූන්‍ය අවකාශයේ (Null(A)) මානය කීයද?`, answer: n - rk, why: `rank + nullity = n (තීරු ගණන) ⟹ nullity = ${n} − ${rk} = ${n - rk}.`, check: { kind: 'calc', compute: () => { const A = Array.from({ length: m }, (_, i) => Array.from({ length: n }, (_, j) => (i < rk && i === j ? 1 : 0))); return n - rankOf(A) } }, section: 'vmat' }
+}
+export function genRankRows(r: Rng = Math.random): Gen {
+  const r1 = [nz(r, 1, 3), ri(r, -2, 3), ri(r, 1, 4)], k = nz(r, 2, 3)
+  const par = r() < 0.5
+  const r3 = par ? r1.map((x) => -x) : [ri(r, -2, 3), nz(r, 1, 3) + r1[1], ri(r, -2, 3)]
+  const M = [r1, r1.map((x) => k * x), r3]
+  const rk = rankOf(M)
+  return { q: `A = [[${M[0].join(', ')}], [${M[1].join(', ')}], [${M[2].join(', ')}]] හි තීරු අවකාශයේ (Col(A)) මානය (= rank) කීයද?`, answer: rk, why: `පේළි 2 = ${k} × පේළි 1 (අනවශ්‍යයි). ${rk === 1 ? 'පේළි 3 ද අලුත් දිශාවක් දෙන්නේ නෑ ⟹ rank 1.' : 'පේළි 3 වෙනස් දිශාවක් ⟹ rank 2.'}`, check: { kind: 'calc', compute: () => rankOf(M) }, section: 'vmat' }
+}
+
+const VBASE = [genVecAdd, genVecScale, genSubsetCount]
+const VSPACE = [genIsSubspace]
+const VBASIS = [genDet2, genIndepMCQ, genDimSpan, genSolDim]
+const VMAT = [genCoords, genToStd, genNullity, genRankRows]
 const PROB = [genDieProb, genCoinProb, genCardProb, genComplementProb, genConditional, genIndependent, genTotalProb, genBayes]
 const SERIES = [genArithTerm, genArithSum, genGeoTerm, genGeoSum, genGeoInfinite, genSigma]
 const REC = [genFactorial, genFib, genRecSeq]
-export const generators = [genPowerDeriv, genPolyDeriv, genChain, genDefinite, genDefiniteQuad, genIndefPower, genIndefPoly, genStandard, ...PROB, ...SERIES, ...REC]
+export const generators = [genPowerDeriv, genPolyDeriv, genChain, genDefinite, genDefiniteQuad, genIndefPower, genIndefPoly, genStandard, ...PROB, ...SERIES, ...REC, ...VBASE, ...VSPACE, ...VBASIS, ...VMAT]
 const POOLS: Record<SectionId, ((r: Rng) => Gen)[]> = {
   diff: [genPowerDeriv, genPolyDeriv, genChain],
   int: [genDefinite, genDefiniteQuad, genIndefPower, genIndefPoly, genStandard],
   prob: PROB, series: SERIES, rec: REC,
+  vbase: VBASE, vspace: VSPACE, vbasis: VBASIS, vmat: VMAT,
 }
 export type PracticeMode = SectionId | 'all'
 export const randomPractice = (r: Rng = Math.random, mode: PracticeMode = 'all'): Gen => {
