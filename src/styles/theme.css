@@ -51,4 +51,15 @@ table.t{border-collapse:collapse;width:100%}table.t td,table.t th{border:1px sol
 .chip{font:inherit;padding:8px 16px;border-radius:999px;border:2px solid #c4b5fd;background:#fff;color:#1e1b4b;cursor:pointer;font-weight:700}
 .chip.good{background:#dcfce7;border-color:var(--ok)}.chip.wrong{background:#fee2e2;border-color:var(--bad)}
 .hl1{color:#dc2626;font-weight:800}.hl2{color:#2563eb;font-weight:800}.hl3{color:#16a34a;font-weight:800}
+.worked{background:#f8fafc;color:#0f172a;border:3px solid #93c5fd;border-radius:18px;padding:14px 16px;margin:14px 0}
+.worked-head{font-weight:800;color:#1d4ed8;margin-bottom:4px}
+.machine{background:#0f172a;color:#e2e8f0;border:3px solid #334155}
+.machine .worked-step{background:#1e293b;color:#f1f5f9;border-left-color:#60a5fa}
+.machine .katex{color:#f8fafc}
+.machine .btn.alt{color:#93c5fd;border-color:#93c5fd}
+.machine input[type=range]{accent-color:#60a5fa}
+.worked-step{display:flex;gap:12px;align-items:flex-start;background:#fff;border-radius:14px;padding:8px 12px;margin:8px 0;border-left:5px solid #3b82f6;animation:pop .35s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.mcard{min-height:84px;border-radius:14px;border:3px solid #c4b5fd;background:#ede9fe;color:#1e1b4b;font:inherit;cursor:pointer;padding:8px;display:flex;align-items:center;justify-content:center;text-align:center}
+.mcard.open{background:#fff}.mcard.done{background:#dcfce7;border-color:#16a34a;cursor:default}.mcard.bad{background:#fee2e2;border-color:#dc2626}
 @media print{.top,.btn{display:none}}

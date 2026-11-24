@@ -7,8 +7,24 @@ import { applyResult, starsFor, load } from '../state/progress'
 // deterministic rng
 const seeded = (seed: number) => () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296)
 
+/** max |F'(x) − f(x)| over a few sample points (x > 0 so ln|x| is fine) */
+function antiderivError(F: (x: number) => number, f: (x: number) => number) {
+  const h = 1e-5
+  return Math.max(...[0.5, 1, 1.7, 2.3].map((x) => Math.abs((F(x + h) - F(x - h)) / (2 * h) - f(x))))
+}
+
 function numeric(g: Gen): number {
   const c = g.check
+  if (c.kind === 'antideriv') {
+    // correct option must differentiate back to f; every distractor must NOT
+    c.Fs.forEach((F, i) => {
+      const err = antiderivError(F, c.f)
+      if (i === g.answer) expect(err).toBeLessThan(1e-3)
+      else expect(err).toBeGreaterThan(1e-2)
+    })
+    expect(new Set(g.options).size).toBe(g.options!.length) // no duplicate option text
+    return Number(g.answer)
+  }
   if (c.kind === 'deriv') {
     const h = 1e-5
     return (c.f(c.at + h) - c.f(c.at - h)) / (2 * h)
@@ -32,6 +48,9 @@ describe('generators produce mathematically correct answers', () => {
 })
 
 describe('quiz content', () => {
+  it('integration topics have at least 10 quiz questions', () => {
+    for (const t of topics.filter((x) => x.section === 'int')) expect(t.quiz.length).toBeGreaterThanOrEqual(10)
+  })
   it('every question is well-formed', () => {
     for (const t of topics) {
       expect(t.quiz.length).toBeGreaterThanOrEqual(6)

@@ -56,6 +56,33 @@ export const Grownup = ({ children }: { children: ReactNode }) => {
   )
 }
 
+/** Step-by-step worked example: reveals one line at a time */
+export function Worked({ title, start, steps }: { title?: string; start: string; steps: { tex?: string; say: ReactNode }[] }) {
+  const [k, setK] = useState(0)
+  const done = k >= steps.length
+  return (
+    <div className="worked">
+      <div className="worked-head">✏️ {title ?? 'පියවරෙන් පියවර උදාහරණය'}</div>
+      <div style={{ textAlign: 'center', fontSize: '1.25em' }}><Tex t={start} block /></div>
+      {steps.slice(0, k).map((s, i) => (
+        <div key={i} className="worked-step">
+          <span className="recipe-n">{i + 1}</span>
+          <div style={{ flex: 1 }}>
+            <div>{s.say}</div>
+            {s.tex && <div style={{ fontSize: '1.15em' }}><Tex t={s.tex} block /></div>}
+          </div>
+        </div>
+      ))}
+      <div className="row" style={{ marginTop: 8 }}>
+        {!done && <button className="btn" onClick={() => setK(k + 1)}>👉 ඊළඟ පියවර ({k + 1}/{steps.length})</button>}
+        {done && <span style={{ fontWeight: 800 }}>🎉 ඉවරයි!</span>}
+        {k > 0 && <button className="btn alt" onClick={() => setK(0)}>🔁 මුල සිට</button>}
+        {!done && k > 0 && <button className="btn alt" onClick={() => setK(steps.length)}>⏭ ඔක්කොම පෙන්වන්න</button>}
+      </div>
+    </div>
+  )
+}
+
 /** Inline quick check inside a lesson */
 export function TryIt({ q, tex, options, answer, why }: { q: string; tex?: string; options: string[]; answer: number; why: string }) {
   const [sel, setSel] = useState<number | null>(null)

@@ -4,7 +4,8 @@ import { topics, topicById, isUnlocked, buildQuiz, topicNames, sectionTitle } fr
 import { LessonPlayer } from '../components/Lesson/LessonPlayer'
 import { QuizEngine, type Tagged } from '../components/Quiz/QuizEngine'
 import { useProgress, PASS } from '../state/progress'
-import { randomPractice } from '../content/generators'
+import { randomPractice, type PracticeMode } from '../content/generators'
+import { isCorrect } from '../content/quizLogic'
 import { Tex } from '../components/Lesson/Formula'
 import { terms } from '../i18n/terms'
 
@@ -85,24 +86,45 @@ export function QuizPage() {
 
 export function PracticePage() {
   const { addXp } = useProgress()
-  const [q, setQ] = useState(() => randomPractice())
-  const [v, setV] = useState('')
+  const [mode, setMode] = useState<PracticeMode>('int')
+  const [q, setQ] = useState(() => randomPractice(Math.random, 'int'))
+  const [v, setV] = useState<string | number>('')
   const [res, setRes] = useState<null | boolean>(null)
+  const [score, setScore] = useState({ right: 0, total: 0 })
   const check = () => {
-    const ok = Math.abs(parseFloat(v.replace('−', '-')) - Number(q.answer)) < 1e-6
+    const ok = isCorrect(q, v)
     setRes(ok)
+    setScore((s) => ({ right: s.right + (ok ? 1 : 0), total: s.total + 1 }))
     if (ok) addXp(5)
   }
-  const next = () => { setQ(randomPractice()); setV(''); setRes(null) }
+  const next = (m: PracticeMode = mode) => { setQ(randomPractice(Math.random, m)); setV(''); setRes(null) }
+  const pick = (m: PracticeMode) => { setMode(m); next(m) }
+  const modes: [PracticeMode, string][] = [['int', '🧺 අනුකලනය'], ['diff', '🔍 අවකලනය'], ['all', '🎲 සියල්ල']]
   return (
     <div className="wrap">
       <h1>🎯 අභ්‍යාස (අනන්ත ප්‍රශ්න)</h1>
+      <div className="row">{modes.map(([m, label]) => <button key={m} className={`chip ${mode === m ? 'good' : ''}`} onClick={() => pick(m)}>{label}</button>)}</div>
+      <p className="en">ලකුණු: {score.right} / {score.total} ✅</p>
       <div className="card">
         <h3>{q.q}</h3>
-        <input type="text" inputMode="decimal" value={v} disabled={res !== null} onChange={(e) => setV(e.target.value)} placeholder="පිළිතුර" />
-        {res !== null && <div className={res ? 'remember' : 'mistake'} style={{ marginTop: 10 }}><b>{res ? '✅ නිවැරදියි! +5 XP' : `❌ නිවැරදි පිළිතුර: ${q.answer}`}</b><div>{q.why}</div></div>}
+        {q.options ? (
+          q.options.map((o, k) => {
+            let cls = 'opt'
+            if (res !== null) cls += k === q.answer ? ' good' : k === v ? ' wrong' : ''
+            else if (v === k) cls += ' sel'
+            return <button key={k} className={cls} disabled={res !== null} onClick={() => setV(k)}>{String.fromCharCode(65 + k)}. {o}</button>
+          })
+        ) : (
+          <input type="text" inputMode="decimal" value={String(v)} disabled={res !== null} onChange={(e) => setV(e.target.value)} placeholder="පිළිතුර (අංකයක්)" />
+        )}
+        {res !== null && (
+          <div className={res ? 'remember' : 'mistake'} style={{ marginTop: 10 }}>
+            <b>{res ? '✅ නිවැරදියි! +5 XP' : `❌ නිවැරදි පිළිතුර: ${q.options ? q.options[q.answer as number] : q.answer}`}</b>
+            <div>{q.why}</div>
+          </div>
+        )}
       </div>
-      {res === null ? <button className="btn" disabled={!v} onClick={check}>පරීක්ෂා කරන්න</button> : <button className="btn" onClick={next}>ඊළඟ →</button>}
+      {res === null ? <button className="btn" disabled={v === ''} onClick={check}>පරීක්ෂා කරන්න</button> : <button className="btn" onClick={() => next()}>ඊළඟ →</button>}
     </div>
   )
 }
