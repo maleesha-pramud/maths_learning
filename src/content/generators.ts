@@ -1,4 +1,4 @@
-import type { Question } from './types'
+import type { Question, SectionId } from './types'
 
 export type Rng = () => number
 const ri = (r: Rng, a: number, b: number) => a + Math.floor(r() * (b - a + 1))
@@ -10,7 +10,11 @@ export interface Gen extends Question {
     | { kind: 'integral'; f: (x: number) => number; a: number; b: number }
     /** MCQ antiderivative: Fs[i] is option i; Fs[answer]' must equal f */
     | { kind: 'antideriv'; f: (x: number) => number; Fs: ((x: number) => number)[] }
-  section: 'diff' | 'int'
+    /** probability by enumeration: answer must equal |{x in space: pred(x)}| / |space| */
+    | { kind: 'enum'; space: unknown[]; pred: (x: any) => boolean }
+    /** independent re-computation of the answer */
+    | { kind: 'calc'; compute: () => number }
+  section: SectionId
 }
 
 /** Derivative of a x^n evaluated at x0 */
@@ -165,11 +169,139 @@ export function genStandard(r: Rng = Math.random): Gen {
   }
 }
 
-export const generators = [genPowerDeriv, genPolyDeriv, genChain, genDefinite, genDefiniteQuad, genIndefPower, genIndefPoly, genStandard]
-const diffGens = [genPowerDeriv, genPolyDeriv, genChain]
-const intGens = [genDefinite, genDefiniteQuad, genIndefPower, genIndefPoly, genStandard]
-export type PracticeMode = 'all' | 'diff' | 'int'
+
+/* ─────────── Probability ─────────── */
+const gcd = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcd(b, a % b))
+const fr = (n: number, d: number) => { const g = gcd(n, d) || 1; return d / g === 1 ? `${n / g}` : `${n / g}/${d / g}` }
+const pick = <T,>(r: Rng, a: T[]): T => a[Math.floor(r() * a.length)]
+const sub = (n: number) => String(n).split('').map((c) => '₀₁₂₃₄₅₆₇₈₉'[+c]).join('')
+const r1 = (x: number) => Math.round(x * 10) / 10
+const r4 = (x: number) => Math.round(x * 10000) / 10000
+
+export function genDieProb(r: Rng = Math.random): Gen {
+  const events: { t: string; pred: (x: number) => boolean }[] = [
+    { t: 'ඉරට්ටේ අගයක්', pred: (x) => x % 2 === 0 },
+    { t: 'ඔත්තේ අගයක්', pred: (x) => x % 2 === 1 },
+    { t: '4 ට වඩා ලොකු අගයක්', pred: (x) => x > 4 },
+    { t: '3 ට අඩු අගයක්', pred: (x) => x < 3 },
+    { t: '3 හි ගුණාකාරයක්', pred: (x) => x % 3 === 0 },
+    { t: 'ප්‍රථමක සංඛ්‍යාවක් (2, 3, 5)', pred: (x) => [2, 3, 5].includes(x) },
+  ]
+  const e = pick(r, events)
+  const space = [1, 2, 3, 4, 5, 6]
+  const k = space.filter(e.pred).length
+  return { q: `දාදු කැටයක් දැමුවාම ${e.t} ලැබෙන සම්භාවිතාව? (භාගයක් හෝ දශමයක්)`, answer: k / 6, why: `|A| = ${k}, |S| = 6 ⟹ P = ${k}/6 = ${fr(k, 6)}.`, check: { kind: 'enum', space, pred: e.pred }, section: 'prob' }
+}
+
+export function genCoinProb(r: Rng = Math.random): Gen {
+  const n = ri(r, 2, 4), k = ri(r, 0, n)
+  const space: string[] = []
+  for (let m = 0; m < 2 ** n; m++) space.push(m.toString(2).padStart(n, '0'))
+  const pred = (x: string) => x.split('').filter((c) => c === '1').length === k
+  const cnt = space.filter(pred).length
+  return { q: `කාසියක් ${n} වතාවක් දැමුවාම හරියටම Head ${k}ක් ලැබෙන සම්භාවිතාව? (භාගයක් හෝ දශමයක්)`, answer: cnt / 2 ** n, why: `|S| = 2^${n} = ${2 ** n}. ප්‍රතිඵල ${cnt}ක් අදාළයි ⟹ ${cnt}/${2 ** n} = ${fr(cnt, 2 ** n)}.`, check: { kind: 'enum', space, pred }, section: 'prob' }
+}
+
+export function genCardProb(r: Rng = Math.random): Gen {
+  const suits = ['♠', '♥', '♦', '♣'], ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
+  const space: [string, string][] = []
+  for (const s of suits) for (const k of ranks) space.push([s, k])
+  const s1 = pick(r, suits), k1 = pick(r, ['A', 'K', 'Q', 'J', '7'])
+  const kind = ri(r, 0, 2)
+  const pred = kind === 0 ? (x: [string, string]) => x[0] === s1 : kind === 1 ? (x: [string, string]) => x[1] === k1 : (x: [string, string]) => x[1] === k1 || x[0] === s1
+  const t = kind === 0 ? `${s1} පතක්` : kind === 1 ? `${k1} පතක්` : `${k1} හෝ ${s1} පතක්`
+  const cnt = space.filter(pred).length
+  return { q: `සම්පූර්ණ කාඩ් කුට්ටමකින් (52) අහඹු ලෙස ${t} ගැනීමේ සම්භාවිතාව? (භාගයක් හෝ දශමයක්)`, answer: cnt / 52, why: kind === 2 ? `(${k1}: 4) + (${s1}: 13) − (දෙකම: 1) = ${cnt} ⟹ ${cnt}/52 = ${fr(cnt, 52)}.` : `|A| = ${cnt}, |S| = 52 ⟹ ${fr(cnt, 52)}.`, check: { kind: 'enum', space, pred }, section: 'prob' }
+}
+
+export function genComplementProb(r: Rng = Math.random): Gen {
+  const tenths = ri(r, 1, 9)
+  const p = tenths / 10
+  return { q: `P(A) = ${p} නම් P(A′) = ?`, answer: r1(1 - p), why: `P(A′) = 1 − ${p} = ${r1(1 - p)}.`, check: { kind: 'calc', compute: () => (10 - tenths) / 10 }, section: 'prob' }
+}
+
+export function genConditional(r: Rng = Math.random): Gen {
+  const pB = pick(r, [0.5, 0.4, 0.8, 0.25]), c = pick(r, [0.2, 0.4, 0.5, 0.6, 0.75])
+  const pAB = r4(pB * c)
+  return { q: `P(A∩B) = ${pAB}, P(B) = ${pB} නම් P(A | B) = ?`, answer: c, why: `P(A|B) = P(A∩B)/P(B) = ${pAB} ÷ ${pB} = ${c}.`, check: { kind: 'calc', compute: () => pAB / pB }, section: 'prob' }
+}
+
+export function genIndependent(r: Rng = Math.random): Gen {
+  const a = ri(r, 2, 9), b = ri(r, 2, 9)
+  const ans = (a * b) / 100
+  return { q: `A, B ස්වාධීන සිදුවීම්: P(A) = ${a / 10}, P(B) = ${b / 10}. P(A∩B) = ?`, answer: ans, why: `ස්වාධීන ⟹ P(A∩B) = P(A)·P(B) = ${a / 10} × ${b / 10} = ${ans}.`, check: { kind: 'calc', compute: () => (a * b) / 100 }, section: 'prob' }
+}
+
+export function genTotalProb(r: Rng = Math.random): Gen {
+  const a = pick(r, [0.2, 0.4, 0.5, 0.6]), x = ri(r, 1, 9) / 10, y = ri(r, 1, 9) / 10
+  const ans = r4(a * x + (1 - a) * y)
+  const uA = Math.round(a * 100), uN = 100 - uA
+  return { q: `P(A) = ${a}, P(A′) = ${r1(1 - a)}, P(B|A) = ${x}, P(B|A′) = ${y}. සම්පූර්ණ සම්භාවිතාව P(B) = ?`, answer: ans, why: `P(B) = ${x}×${a} + ${y}×${r1(1 - a)} = ${r4(x * a)} + ${r4(y * (1 - a))} = ${ans}.`, check: { kind: 'calc', compute: () => (uA * x + uN * y) / 100 }, section: 'prob' }
+}
+
+export function genBayes(r: Rng = Math.random): Gen {
+  const [a, x, y, ans] = pick(r, [[0.4, 0.7, 0.2, 0.7], [0.5, 0.6, 0.2, 0.75], [0.5, 0.9, 0.1, 0.9], [0.5, 0.3, 0.1, 0.75]])
+  const pB = r4(a * x + (1 - a) * y)
+  return { q: `P(A) = ${a}, P(B|A) = ${x}, P(B|A′) = ${y}. බේස් ප්‍රමේයයෙන් P(A | B) = ?`, answer: ans, why: `P(B) = ${pB}. P(A|B) = (${x} × ${a}) ÷ ${pB} = ${r4(x * a)} ÷ ${pB} = ${ans}.`, check: { kind: 'calc', compute: () => (a * x) / (a * x + (1 - a) * y) }, section: 'prob' }
+}
+
+/* ─────────── Series ─────────── */
+export function genArithTerm(r: Rng = Math.random): Gen {
+  const a = ri(r, 1, 10), d = ri(r, 2, 6), n = ri(r, 5, 12)
+  return { q: `${a}, ${a + d}, ${a + 2 * d}, ${a + 3 * d}, … හි ${n} වෙනි පදය?`, answer: a + (n - 1) * d, why: `aₙ = a + (n−1)d = ${a} + ${n - 1}×${d} = ${a + (n - 1) * d}.`, check: { kind: 'calc', compute: () => { let t = a; for (let i = 1; i < n; i++) t += d; return t } }, section: 'series' }
+}
+export function genArithSum(r: Rng = Math.random): Gen {
+  const a = ri(r, 1, 8), d = ri(r, 1, 5), n = ri(r, 4, 12)
+  const l = a + (n - 1) * d
+  return { q: `${a} + ${a + d} + ${a + 2 * d} + … + ${l} හි එකතුව? (පද ${n}ක්)`, answer: (n * (a + l)) / 2, why: `Sₙ = n/2 (a + l) = ${n}/2 × (${a} + ${l}) = ${(n * (a + l)) / 2}.`, check: { kind: 'calc', compute: () => { let s = 0, t = a; for (let i = 0; i < n; i++) { s += t; t += d } return s } }, section: 'series' }
+}
+export function genGeoTerm(r: Rng = Math.random): Gen {
+  const a = ri(r, 1, 5), g = ri(r, 2, 4), n = ri(r, 3, 6)
+  return { q: `${a}, ${a * g}, ${a * g * g}, … (ගුණෝත්තර) හි ${n} වෙනි පදය?`, answer: a * g ** (n - 1), why: `aₙ = a·rⁿ⁻¹ = ${a} × ${g}^${n - 1} = ${a * g ** (n - 1)}.`, check: { kind: 'calc', compute: () => { let t = a; for (let i = 1; i < n; i++) t *= g; return t } }, section: 'series' }
+}
+export function genGeoSum(r: Rng = Math.random): Gen {
+  const a = ri(r, 1, 5), g = ri(r, 2, 3), n = ri(r, 3, 6)
+  return { q: `${a} + ${a * g} + ${a * g * g} + … පද ${n}ක එකතුව?`, answer: (a * (g ** n - 1)) / (g - 1), why: `Sₙ = a(rⁿ−1)/(r−1) = ${a}(${g}^${n} − 1)/${g - 1} = ${(a * (g ** n - 1)) / (g - 1)}.`, check: { kind: 'calc', compute: () => { let s = 0, t = a; for (let i = 0; i < n; i++) { s += t; t *= g } return s } }, section: 'series' }
+}
+export function genGeoInfinite(r: Rng = Math.random): Gen {
+  const k = ri(r, 2, 5), m = ri(r, 1, 3), a = (k - 1) * m
+  return { q: `${a} + ${a}/${k} + ${a}/${k * k} + … (අනන්තය දක්වා) එකතුව?`, answer: k * m, why: `r = 1/${k}, |r| < 1 ⟹ S = a/(1−r) = ${a} ÷ (${k - 1}/${k}) = ${k * m}.`, check: { kind: 'calc', compute: () => { let s = 0, t = a; for (let i = 0; i < 400; i++) { s += t; t /= k } return Math.round(s * 1e6) / 1e6 } }, section: 'series' }
+}
+export function genSigma(r: Rng = Math.random): Gen {
+  const p = ri(r, 1, 3), n = ri(r, 3, 10)
+  const f = p === 1 ? (n * (n + 1)) / 2 : p === 2 ? (n * (n + 1) * (2 * n + 1)) / 6 : ((n * (n + 1)) / 2) ** 2
+  return { q: `Σ (i = 1 සිට ${n}) i${['', '', '²', '³'][p]} = ?`, answer: f, why: `සූත්‍රය: ${p === 1 ? 'n(n+1)/2' : p === 2 ? 'n(n+1)(2n+1)/6' : '[n(n+1)/2]²'} ⟹ ${f}.`, check: { kind: 'calc', compute: () => { let s = 0; for (let i = 1; i <= n; i++) s += i ** p; return s } }, section: 'series' }
+}
+
+/* ─────────── Recursion ─────────── */
+export function genFactorial(r: Rng = Math.random): Gen {
+  const n = ri(r, 3, 7)
+  let f = 1; for (let i = 2; i <= n; i++) f *= i
+  return { q: `${n}! = ?`, answer: f, why: `${n}! = ${Array.from({ length: n }, (_, i) => n - i).join(' × ')} = ${f}.`, check: { kind: 'calc', compute: () => { const rec = (k: number): number => (k === 0 ? 1 : k * rec(k - 1)); return rec(n) } }, section: 'rec' }
+}
+export function genFib(r: Rng = Math.random): Gen {
+  const n = ri(r, 4, 11)
+  const seq = [0, 1]; for (let i = 2; i <= n; i++) seq.push(seq[i - 1] + seq[i - 2])
+  return { q: `Fibonacci: F₀ = 0, F₁ = 1, Fₙ = Fₙ₋₁ + Fₙ₋₂. F${sub(n)} = ?`, answer: seq[n], why: `අනුක්‍රමය: ${seq.join(', ')}.`, check: { kind: 'calc', compute: () => { const f = (k: number): number => (k < 2 ? k : f(k - 1) + f(k - 2)); return f(n) } }, section: 'rec' }
+}
+export function genRecSeq(r: Rng = Math.random): Gen {
+  const a1 = ri(r, 1, 5), d = ri(r, 2, 5), k = ri(r, 4, 7), mul = r() < 0.5
+  const m = ri(r, 2, 3)
+  const seq = [a1]; for (let i = 1; i < k; i++) seq.push(mul ? seq[i - 1] * m : seq[i - 1] + d)
+  return { q: `a₁ = ${a1}, aₙ = ${mul ? `${m}·aₙ₋₁` : `aₙ₋₁ + ${d}`}. a${sub(k)} = ?`, answer: seq[k - 1], why: `අනුක්‍රමය: ${seq.join(', ')}.`, check: { kind: 'calc', compute: () => { let t = a1; for (let i = 1; i < k; i++) t = mul ? t * m : t + d; return t } }, section: 'rec' }
+}
+
+const PROB = [genDieProb, genCoinProb, genCardProb, genComplementProb, genConditional, genIndependent, genTotalProb, genBayes]
+const SERIES = [genArithTerm, genArithSum, genGeoTerm, genGeoSum, genGeoInfinite, genSigma]
+const REC = [genFactorial, genFib, genRecSeq]
+export const generators = [genPowerDeriv, genPolyDeriv, genChain, genDefinite, genDefiniteQuad, genIndefPower, genIndefPoly, genStandard, ...PROB, ...SERIES, ...REC]
+const POOLS: Record<SectionId, ((r: Rng) => Gen)[]> = {
+  diff: [genPowerDeriv, genPolyDeriv, genChain],
+  int: [genDefinite, genDefiniteQuad, genIndefPower, genIndefPoly, genStandard],
+  prob: PROB, series: SERIES, rec: REC,
+}
+export type PracticeMode = SectionId | 'all'
 export const randomPractice = (r: Rng = Math.random, mode: PracticeMode = 'all'): Gen => {
-  const pool = mode === 'diff' ? diffGens : mode === 'int' ? intGens : generators
+  const pool = mode === 'all' ? generators : POOLS[mode]
   return pool[Math.floor(r() * pool.length)](r)
 }

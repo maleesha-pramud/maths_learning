@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { topics, topicById, isUnlocked, buildQuiz, topicNames, sectionTitle } from '../content/topics'
+import { topics, topicById, isUnlocked, buildQuiz, topicNames, sectionTitle, SUBJECTS, SECTIONS, subjectById, subjectOfTopic, topicsOfSubject, topicsOfSection } from '../content/topics'
 import { LessonPlayer } from '../components/Lesson/LessonPlayer'
 import { QuizEngine, type Tagged } from '../components/Quiz/QuizEngine'
 import { useProgress, PASS } from '../state/progress'
@@ -18,19 +18,49 @@ const Owl = ({ children }: { children: React.ReactNode }) => (
 
 export function Home() {
   const { p } = useProgress()
-  const special = ['sec-diff', 'sec-int', 'final']
   return (
     <div className="wrap">
-      <Owl>ආයුබෝවන්! මම <b>ගුරු බකමූණා</b> 🦉. අපි ගණිතය විනෝදයෙන් ඉගෙන ගමු! පාඩම් එකින් එක විවෘත වෙනවා — ප්‍රශ්නාවලියෙන් {PASS}% ක් ගත්තාම ඊළඟ පාඩම ලැබේ.</Owl>
-      <h2>🗺️ අවකලනය (Differential Calculus)</h2>
-      <div className="map">{topics.filter((t) => t.section === 'diff').map((t) => <Island key={t.id} id={t.id} to={`/lesson/${t.id}`} icon={t.icon} title={t.si} sub={t.en} n={t.n} />)}</div>
-      <p><Island id="sec-diff" to="/quiz/sec-diff" icon="🏅" title={sectionTitle['sec-diff']} sub="15 ප්‍රශ්න" /></p>
-      <h2>🗺️ අනුකලනය (Integral Calculus)</h2>
-      <div className="map">{topics.filter((t) => t.section === 'int').map((t) => <Island key={t.id} id={t.id} to={`/lesson/${t.id}`} icon={t.icon} title={t.si} sub={t.en} n={t.n} />)}</div>
-      <p><Island id="sec-int" to="/quiz/sec-int" icon="🏅" title={sectionTitle['sec-int']} sub="15 ප්‍රශ්න" /></p>
+      <Owl>ආයුබෝවන්! මම <b>ගුරු බකමූණා</b> 🦉. අපි ගණිතය විනෝදයෙන් ඉගෙන ගමු! විෂයක් තෝරන්න. පාඩම් එකින් එක විවෘත වෙනවා — ප්‍රශ්නාවලියෙන් {PASS}% ක් ගත්තාම ඊළඟ පාඩම ලැබේ.</Owl>
+      <div className="map" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))' }}>
+        {SUBJECTS.map((s) => {
+          const list = topicsOfSubject(s.id)
+          const done = list.filter((t) => (p.stars[t.id] ?? 0) >= 1).length
+          const stars = list.reduce((a, t) => a + (p.stars[t.id] ?? 0), 0)
+          return (
+            <Link key={s.id} to={`/subject/${s.id}`} className="island">
+              <div style={{ fontSize: '3em' }}>{s.icon}</div>
+              <b style={{ fontSize: '1.15em' }}>{s.si}</b>
+              <div className="en">{s.en}</div>
+              <div className="progress"><div style={{ width: `${(done / list.length) * 100}%` }} /></div>
+              <div>{done} / {list.length} පාඩම් ✅ &nbsp; ⭐ {stars}/{list.length * 3}</div>
+            </Link>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function SubjectPage() {
+  const { sid = '' } = useParams()
+  const { p } = useProgress()
+  const sub = subjectById(sid)
+  if (!sub) return <div className="wrap">විෂය හමු නොවීය. <Link to="/">මුල් පිටුව</Link></div>
+  const secs = SECTIONS.filter((s) => s.subject === sub.id)
+  return (
+    <div className="wrap">
+      <p><Link to="/">← විෂයන්</Link></p>
+      <h1>{sub.icon} {sub.si} <span className="en">{sub.en}</span></h1>
+      {secs.map((sec) => (
+        <div key={sec.id}>
+          <h2>🗺️ {sec.si} ({sec.en})</h2>
+          <div className="map">{topicsOfSection(sec.id).map((t) => <Island key={t.id} id={t.id} to={`/lesson/${t.id}`} icon={t.icon} title={t.si} sub={t.en} n={t.n} />)}</div>
+          <p><Island id={sec.testId} to={`/quiz/${sec.testId}`} icon="🏅" title={sectionTitle[sec.testId]} sub="15 ප්‍රශ්න" /></p>
+        </div>
+      ))}
       <h2>🏆 මහා විභාගය</h2>
-      <Island id="final" to="/quiz/final" icon="🏆" title={sectionTitle.final} sub="30 ප්‍රශ්න · සියලු පාඩම්" />
-      <p className="en">{special.filter((s) => isUnlocked(p, s)).length} / 3 විශේෂ පරීක්ෂණ විවෘතයි</p>
+      <Island id={sub.finalId} to={`/quiz/${sub.finalId}`} icon="🏆" title={sectionTitle[sub.finalId]} sub="30 ප්‍රශ්න · සියලු පාඩම්" />
+      <p className="en">{[...secs.map((s) => s.testId), sub.finalId].filter((s) => isUnlocked(p, s)).length} / {secs.length + 1} විශේෂ පරීක්ෂණ විවෘතයි</p>
     </div>
   )
 }
@@ -57,6 +87,7 @@ export function LessonPage() {
   if (!isUnlocked(p, id)) return <div className="wrap card">🔒 මෙම පාඩම තවම විවෘත නැත. කලින් පාඩමේ ප්‍රශ්නාවලිය සමත් වන්න. <Link to="/">← ආපසු</Link></div>
   return (
     <div className="wrap">
+      <p><Link to={`/subject/${subjectOfTopic(t)}`}>← පාඩම් සිතියම</Link></p>
       <h1>{t.icon} {t.n}. {t.si} <span className="en">{t.en}</span></h1>
       <LessonPlayer topic={t} />
     </div>
@@ -78,7 +109,7 @@ export function QuizPage() {
       <QuizEngine key={round} questions={qs} topicNames={topicNames} onFinish={(pct) => record(id, pct)} />
       <div className="row" style={{ marginTop: 12 }}>
         <button className="btn alt" onClick={() => setRound(round + 1)}>🔁 නැවත උත්සාහ කරන්න</button>
-        <button className="btn alt" onClick={() => nav('/')}>🏠 මුල් පිටුව</button>
+        <button className="btn alt" onClick={() => nav(topicById(id) ? `/subject/${subjectOfTopic(topicById(id)!)}` : '/')}>🏠 සිතියමට</button>
       </div>
     </div>
   )
@@ -99,7 +130,7 @@ export function PracticePage() {
   }
   const next = (m: PracticeMode = mode) => { setQ(randomPractice(Math.random, m)); setV(''); setRes(null) }
   const pick = (m: PracticeMode) => { setMode(m); next(m) }
-  const modes: [PracticeMode, string][] = [['int', '🧺 අනුකලනය'], ['diff', '🔍 අවකලනය'], ['all', '🎲 සියල්ල']]
+  const modes: [PracticeMode, string][] = [...SECTIONS.map((s) => [s.id, `${s.icon} ${s.si}`] as [PracticeMode, string]), ['all', '🎲 සියල්ල']]
   return (
     <div className="wrap">
       <h1>🎯 අභ්‍යාස (අනන්ත ප්‍රශ්න)</h1>
@@ -115,7 +146,7 @@ export function PracticePage() {
             return <button key={k} className={cls} disabled={res !== null} onClick={() => setV(k)}>{String.fromCharCode(65 + k)}. {o}</button>
           })
         ) : (
-          <input type="text" inputMode="decimal" value={String(v)} disabled={res !== null} onChange={(e) => setV(e.target.value)} placeholder="පිළිතුර (අංකයක්)" />
+          <input type="text" inputMode="decimal" value={String(v)} disabled={res !== null} onChange={(e) => setV(e.target.value)} placeholder="පිළිතුර (අංකයක් හෝ භාගයක් — 1/2)" />
         )}
         {res !== null && (
           <div className={res ? 'remember' : 'mistake'} style={{ marginTop: 10 }}>

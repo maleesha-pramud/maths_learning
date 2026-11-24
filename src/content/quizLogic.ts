@@ -1,8 +1,17 @@
 import type { Question } from './types'
 
+/** Parse "0.5", "-3", "1/2", "−3/4" (also unicode minus). Returns NaN if not a number. */
+export function parseNum(input: string | number): number {
+  if (typeof input === 'number') return input
+  const t = input.trim().replace(',', '.').replace(/[−–]/g, '-').replace(/\s+/g, '')
+  const m = t.match(/^(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/)
+  if (m) return Number(m[2]) === 0 ? NaN : Number(m[1]) / Number(m[2])
+  return /^-?\d*\.?\d+$/.test(t) ? parseFloat(t) : NaN
+}
+
 export function isCorrect(q: Question, given: string | number): boolean {
   if (q.options) return given === q.answer
-  const g = parseFloat(String(given).replace(',', '.').replace('−', '-'))
+  const g = parseNum(given)
   return Number.isFinite(g) && Math.abs(g - Number(q.answer)) < 1e-6
 }
 

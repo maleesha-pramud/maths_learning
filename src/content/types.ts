@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+export type SectionId = 'diff' | 'int' | 'prob' | 'series' | 'rec'
+export type SubjectId = 'calc' | 'psr'
 export interface Step { title: string; body: ReactNode }
 export interface Question {
   q: string            // question text (Sinhala), may contain $latex$ is NOT supported - use plain text/unicode
@@ -8,6 +10,6 @@ export interface Question {
   why: string          // Sinhala explanation
 }
 export interface Topic {
-  id: string; n: number; icon: string; si: string; en: string; section: 'diff' | 'int'
+  id: string; n: number; icon: string; si: string; en: string; section: SectionId
   steps: Step[]; remember: string[]; mistakes: string[]; quiz: Question[]
 }

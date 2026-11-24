@@ -1,6 +1,6 @@
 import { HashRouter, Link, Route, Routes } from 'react-router-dom'
 import { ProgressProvider, useProgress } from './state/progress'
-import { Home, LessonPage, QuizPage, PracticePage, GlossaryPage, ProgressPage } from './pages/pages'
+import { Home, SubjectPage, LessonPage, QuizPage, PracticePage, GlossaryPage, ProgressPage } from './pages/pages'
 
 function Top() {
   const { p } = useProgress()
@@ -28,6 +28,7 @@ export default function App() {
         <Top />
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/subject/:sid" element={<SubjectPage />} />
           <Route path="/lesson/:id" element={<LessonPage />} />
           <Route path="/quiz/:id" element={<QuizPage />} />
           <Route path="/practice" element={<PracticePage />} />

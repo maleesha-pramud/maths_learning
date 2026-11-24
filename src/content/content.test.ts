@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { generators, type Gen } from './generators'
-import { isCorrect, scorePct, pickBalanced } from './quizLogic'
-import { topics, buildQuiz, isUnlocked } from './topics'
+import { generators, randomPractice, type Gen } from './generators'
+import { isCorrect, scorePct, pickBalanced, parseNum } from './quizLogic'
+import { topics, buildQuiz, isUnlocked, SECTIONS, SUBJECTS, topicsOfSubject } from './topics'
 import { applyResult, starsFor, load } from '../state/progress'
 
 // deterministic rng
@@ -29,6 +29,8 @@ function numeric(g: Gen): number {
     const h = 1e-5
     return (c.f(c.at + h) - c.f(c.at - h)) / (2 * h)
   }
+  if (c.kind === 'enum') return c.space.filter(c.pred).length / c.space.length
+  if (c.kind === 'calc') return c.compute()
   const n = 2000, w = (c.b - c.a) / n
   let s = 0
   for (let i = 0; i < n; i++) s += c.f(c.a + (i + 0.5) * w) * w
@@ -48,8 +50,16 @@ describe('generators produce mathematically correct answers', () => {
 })
 
 describe('quiz content', () => {
-  it('integration topics have at least 10 quiz questions', () => {
-    for (const t of topics.filter((x) => x.section === 'int')) expect(t.quiz.length).toBeGreaterThanOrEqual(10)
+  it('integration and probability/series/recursion topics have at least 10 quiz questions', () => {
+    for (const t of topics.filter((x) => x.section !== 'diff')) expect(t.quiz.length, t.id).toBeGreaterThanOrEqual(10)
+  })
+  it('topic ids are unique and each topic has steps, remember and mistakes', () => {
+    expect(new Set(topics.map((t) => t.id)).size).toBe(topics.length)
+    for (const t of topics) { expect(t.steps.length, t.id).toBeGreaterThanOrEqual(3); expect(t.remember.length).toBeGreaterThan(0); expect(t.mistakes.length).toBeGreaterThan(0) }
+  })
+  it('calculus has 12 topics and probability/series/recursion has 15', () => {
+    expect(topicsOfSubject('calc')).toHaveLength(12)
+    expect(topicsOfSubject('psr')).toHaveLength(15)
   })
   it('every question is well-formed', () => {
     for (const t of topics) {
@@ -70,9 +80,13 @@ describe('quiz content', () => {
     const f = buildQuiz('final')
     expect(f).toHaveLength(30)
   })
-  it('section tests have 15', () => {
-    expect(buildQuiz('sec-diff')).toHaveLength(15)
-    expect(buildQuiz('sec-int')).toHaveLength(15)
+  it('section tests have 15 and subject finals have 30', () => {
+    for (const sec of SECTIONS) expect(buildQuiz(sec.testId), sec.testId).toHaveLength(15)
+    for (const sub of SUBJECTS) expect(buildQuiz(sub.finalId), sub.finalId).toHaveLength(30)
+  })
+  it('a subject final only draws that subject\'s questions', () => {
+    const ids = new Set(topicsOfSubject('psr').map((t) => t.id))
+    for (const q of buildQuiz('final-psr') as { topic?: string }[]) expect(ids.has(q.topic as string)).toBe(true)
   })
 })
 
@@ -82,6 +96,16 @@ describe('quiz logic', () => {
     expect(isCorrect({ q: '', options: ['a', 'b'], answer: 1, why: '' }, 0)).toBe(false)
     expect(isCorrect({ q: '', answer: -0.75, why: '' }, '−0.75')).toBe(true)
     expect(isCorrect({ q: '', answer: 6, why: '' }, 'abc')).toBe(false)
+  })
+  it('accepts fraction answers', () => {
+    expect(parseNum('1/2')).toBeCloseTo(0.5)
+    expect(parseNum(' 3 / 4 ')).toBeCloseTo(0.75)
+    expect(parseNum('−1/4')).toBeCloseTo(-0.25)
+    expect(parseNum('1/0')).toBeNaN()
+    expect(parseNum('1/')).toBeNaN()
+    expect(isCorrect({ q: '', answer: 1 / 3, why: '' }, '1/3')).toBe(true)
+    expect(isCorrect({ q: '', answer: 0.5, why: '' }, '2/4')).toBe(true)
+    expect(isCorrect({ q: '', answer: 0.5, why: '' }, '1/3')).toBe(false)
   })
   it('scores', () => {
     expect(scorePct(7, 10)).toBe(70)
@@ -113,6 +137,31 @@ describe('progress & unlocking', () => {
     for (const t of topics) p = applyResult(p, t.id, 100)
     expect(isUnlocked(p, 'final')).toBe(true)
     expect(isUnlocked(p, 'sec-diff')).toBe(true)
+  })
+  it('subjects unlock independently', () => {
+    let p = load()
+    expect(isUnlocked(p, 'p1')).toBe(true)
+    expect(isUnlocked(p, 'p2')).toBe(false)
+    for (const t of topicsOfSubject('calc')) p = applyResult(p, t.id, 100)
+    expect(isUnlocked(p, 'final')).toBe(true)
+    expect(isUnlocked(p, 'p2')).toBe(false)
+    expect(isUnlocked(p, 'final-psr')).toBe(false)
+    p = applyResult(p, 'p1', 80)
+    expect(isUnlocked(p, 'p2')).toBe(true)
+    expect(isUnlocked(p, 's1')).toBe(false)
+  })
+  it('section tests open when that section is passed', () => {
+    let p = load()
+    for (const t of topics.filter((x) => x.section === 'prob')) p = applyResult(p, t.id, 100)
+    expect(isUnlocked(p, 'sec-prob')).toBe(true)
+    expect(isUnlocked(p, 'sec-series')).toBe(false)
+    expect(isUnlocked(p, 'final-psr')).toBe(false)
+    for (const t of topicsOfSubject('psr')) p = applyResult(p, t.id, 100)
+    expect(isUnlocked(p, 'final-psr')).toBe(true)
+  })
+  it('practice modes only give questions from that section', () => {
+    const r = seeded(3)
+    for (const sec of SECTIONS) for (let i = 0; i < 40; i++) expect(randomPractice(r, sec.id).section).toBe(sec.id)
   })
   it('survives missing localStorage', () => {
     expect(() => load()).not.toThrow()
