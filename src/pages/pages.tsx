@@ -60,7 +60,7 @@ export function SubjectPage() {
       ))}
       <h2>🏆 මහා විභාගය</h2>
       <Island id={sub.finalId} to={`/quiz/${sub.finalId}`} icon="🏆" title={sectionTitle[sub.finalId]} sub="30 ප්‍රශ්න · සියලු පාඩම්" />
-      <p className="en">{[...secs.map((s) => s.testId), sub.finalId].filter((s) => isUnlocked(p, s)).length} / {secs.length + 1} විශේෂ පරීක්ෂණ විවෘතයි</p>
+      <p className="en">{[...secs.map((s) => s.testId), sub.finalId].filter((s) => (p.stars[s] ?? 0) >= 1).length} / {secs.length + 1} විශේෂ පරීක්ෂණ සමත් කර ඇත</p>
     </div>
   )
 }

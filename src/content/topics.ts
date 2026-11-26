@@ -37,20 +37,9 @@ export const subjectOfTopic = (t: Topic): SubjectId => sectionById(t.section).su
 export const topicsOfSubject = (sid: SubjectId) => topics.filter((t) => subjectOfTopic(t) === sid)
 export const topicsOfSection = (sec: SectionId) => topics.filter((t) => t.section === sec)
 
-const passed = (p: Progress, id: string) => (p.stars[id] ?? 0) >= 1
-
-export function isUnlocked(p: Progress, id: string): boolean {
-  const t = topicById(id)
-  if (t) {
-    const list = topicsOfSubject(subjectOfTopic(t))
-    const i = list.findIndex((x) => x.id === id)
-    return i === 0 || passed(p, list[i - 1].id)
-  }
-  const sec = SECTIONS.find((s) => s.testId === id)
-  if (sec) return topicsOfSection(sec.id).every((x) => passed(p, x.id))
-  const sub = SUBJECTS.find((s) => s.finalId === id)
-  if (sub) return topicsOfSubject(sub.id).every((x) => passed(p, x.id))
-  return false
+/** Everything is open: learners may start anywhere, in any order. Only unknown ids are "locked". */
+export function isUnlocked(_p: Progress, id: string): boolean {
+  return !!topicById(id) || SECTIONS.some((s) => s.testId === id) || SUBJECTS.some((s) => s.finalId === id)
 }
 
 export const sectionTitle: Record<string, string> = {
